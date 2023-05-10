@@ -1,5 +1,10 @@
 from ImageGoNord import NordPaletteFile, GoNord
 import ffmpeg
+import numpy as np
+import sys
+from PIL import Image
+import os
+from datetime import datetime
 
 #list_imgs = os.listdir('images')
 
@@ -12,10 +17,12 @@ def assemble_video(input_dir, output_dir = '.'):
 
     output_dir: Saves video to location. Defaults to base directory.
     '''
-    ffmpeg
-    .input(f'{input_dir}/*.jpg', pattern_type='glob', framerate=25)
-    .output(f'{output_dir}/movie.mp4')
-    .run()
+    (
+        ffmpeg
+        .input(f'{input_dir}/*.jpg', pattern_type='glob', framerate=25)
+        .output(f'{output_dir}/movie.gif')
+        .run()
+    )
 
 
 def nordify(img_dir = 'images'):
@@ -25,33 +32,48 @@ def nordify(img_dir = 'images'):
     Replace image with image converted to nord palette.
     '''
     print("Nordifying Images")
+    intermediate_time = datetime.now()
     go_nord = GoNord()
     img_list = os.listdir(img_dir)
     for img in img_list:
         image = go_nord.open_image(os.path.join(img_dir, img))
         go_nord.convert_image(image, save_path=os.path.join(img_dir, img))
+    print('Nordifying Duration: {}'.format(datetime.now() - start_time))
     print("Successfully Nordified")
 
-'''
-
-# Flip horizontally
-(
-    ffmpeg
-    .input('video/tom.mp4')
-    .hflip()
-    .output('output.mp4')
-    .run()
-)
-'''
-'''
-probe = ffmpeg.probe('video/tom.mp4')
-video_stream = next((stream for stream in probe['streams'] if stream['codec_type'] == 'video'), None)
-width = int(video_stream['width'])
-height = int(video_stream['height'])
-'''
 
 
+def convert_vid_to_np_arr(video_path):
+    probe = ffmpeg.probe(video_path)
+    video_stream = next((stream for stream in probe['streams'] if stream['codec_type'] == 'video'), None)
+    width = int(video_stream['width'])
+    height = int(video_stream['height'])
+    num_frames = int(video_stream['nb_frames'])
+    print(num_frames)
+    out, _ = (
+        ffmpeg
+        .input(video_path)
+        .output('pipe:', format='rawvideo', pix_fmt='rgb24')
+        .run(capture_stdout=True)
+    )
+    video = (
+        np
+        .frombuffer(out, np.uint8)
+        .reshape([-1, height, width, 3])
+    )
+    return video
 
+
+start_time = datetime.now()
+
+out = convert_vid_to_np_arr('video/luffy.gif')
+for ind in range(len(out)):
+    im = Image.fromarray(out[ind])
+    im.save(f'images/frame{str(ind).zfill(len(str(len(out))))}.jpg')
+nordify()
+assemble_video('images')
+
+print('Duration: {}'.format(datetime.now() - start_time))
 
 
 
