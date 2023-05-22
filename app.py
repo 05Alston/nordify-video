@@ -1,13 +1,10 @@
-from ImageGoNord import NordPaletteFile, GoNord
+# from ImageGoNord import NordPaletteFile, GoNord
 import ffmpeg
 import numpy as np
 import sys
-from PIL import Image
+from PIL import Image, ImageColor
 import os
 from datetime import datetime
-
-#list_imgs = os.listdir('images')
-
 
 def assemble_video(input_dir, output_dir = '.'):
     '''
@@ -20,113 +17,101 @@ def assemble_video(input_dir, output_dir = '.'):
     (
         ffmpeg
         .input(f'{input_dir}/*.jpg', pattern_type='glob', framerate=25)
-        .output(f'{output_dir}/movie.gif')
+        .output(f'{output_dir}/movie.gif', loglevel='quiet')
         .run()
     )
 
+def convert_palette(palette, img_array):
+    
+    # if the image doesn't have an alpha channel, add one with all 255s
+    if img_array.shape[2] == 3:
+        img_array = np.concatenate((img_array, np.full((img_array.shape[0], img_array.shape[1], 1), 255)), axis=2)
+    
+    # create a new array to hold the pixelated image
+    pixelated_array = np.zeros(img_array.shape)
 
-def nordify(img_dir = 'images'):
-    '''
-    img_dir: location of all frames.
+    norms = np.linalg.norm(
+        palette[np.newaxis, np.newaxis, :, :] 
+        - img_array[:, :, np.newaxis, :], axis=-1
+    )
+    closest_indexes = np.argmin(norms, axis=-1)
 
-    Replace image with image converted to nord palette.
-    '''
-    print("Nordifying Images")
-    intermediate_time = datetime.now()
-    go_nord = GoNord()
-    img_list = os.listdir(img_dir)
-    for img in img_list:
-        image = go_nord.open_image(os.path.join(img_dir, img))
-        go_nord.convert_image(image, save_path=os.path.join(img_dir, img))
-    print('Nordifying Duration: {}'.format(datetime.now() - start_time))
-    print("Successfully Nordified")
-
-
+    # loop over the image array
+    for i in range(img_array.shape[0]):
+        for j in range(img_array.shape[1]):
+            pixelated_array[i][j] = palette[closest_indexes[i][j]]
+    
+    return pixelated_array
 
 def convert_vid_to_np_arr(video_path):
     probe = ffmpeg.probe(video_path)
     video_stream = next((stream for stream in probe['streams'] if stream['codec_type'] == 'video'), None)
     width = int(video_stream['width'])
     height = int(video_stream['height'])
-    num_frames = int(video_stream['nb_frames'])
-    print(num_frames)
+
     out, _ = (
         ffmpeg
         .input(video_path)
-        .output('pipe:', format='rawvideo', pix_fmt='rgb24')
+        .output('pipe:', format='rawvideo', pix_fmt='rgb24', loglevel='quiet')
         .run(capture_stdout=True)
     )
-    video = (
-        np
-        .frombuffer(out, np.uint8)
-        .reshape([-1, height, width, 3])
+
+    video_np_arr = (
+        # np.array(img.resize((int(width/4), int(height/4)), Image.LANCZOS))
+        # np
+        # .frombuffer(out, np.uint8)
+        # .reshape([-1, height, width, 3])
+         np.array(
+        np.frombuffer(out, np.uint8)
+                 .reshape([-1, height, width, 3]))
     )
-    return video
+
+    return video_np_arr
 
 
-start_time = datetime.now()
+def main():
+    nord_palette = [
+    "#BF616AFF",
+    "#D08770FF",
+    "#EBCB8BFF",
+    "#A3BE8CFF",
+    "#B48EADFF",
+    "#8FBCBBFF",
+    "#88C0D0FF",
+    "#81A1C1FF",
+    "#5E81ACFF",
+    "#2E3440FF",
+    "#3B4252FF",
+    "#434C5EFF",
+    "#4C566AFF",
+    "#D8DEE9FF",
+    "#E5E9F0FF",
+    "#ECEFF4FF"
+    ]
 
-out = convert_vid_to_np_arr('video/luffy.gif')
-for ind in range(len(out)):
-    im = Image.fromarray(out[ind])
-    im.save(f'images/frame{str(ind).zfill(len(str(len(out))))}.jpg')
-nordify()
-assemble_video('images')
+    # convert color palette to np array
+    nord_palette = np.array(
+        [np.array(ImageColor.getrgb(color)) for color in nord_palette]
+    )
+    start_time = datetime.now()
 
-print('Duration: {}'.format(datetime.now() - start_time))
+    np_arr = convert_vid_to_np_arr('video/luffy.gif')
 
+    converted_array = np.zeros(
+            (np_arr.shape[0],np_arr.shape[1],np_arr.shape[2],np_arr.shape[3] + 1)
+        ) if np_arr[0].shape[2] == 3 else np.zeros(np_arr.shape)
+    for ind, frame in enumerate(np_arr):
+        converted_array[ind] = convert_palette(nord_palette, frame)
+        (
+            Image
+            .fromarray((converted_array[ind] * 255).astype(np.uint8))
+            .save(f'images/frame{str(ind).zfill(len(str(len(converted_array))))}.png')
+        )
+    # for ind in range(len(np_arr)):
+    # nordify()
+    # assemble_video('images')
 
+    print('Duration: {}'.format(datetime.now() - start_time))
 
-
-
-
-
-
-
-
-
-
-#### Old stuff
-'''
-print("Frame Extraction Begun")
-vidcap = cv2.VideoCapture('video/tom.mp4')
-def getFrame(sec):
-    vidcap.set(cv2.CAP_PROP_POS_MSEC,sec*1000)
-    hasFrames,image = vidcap.read()
-    if hasFrames:
-        cv2.imwrite(f'images/image{str(count)}.jpg', image) # save frame as JPG file
-    return hasFrames
-sec = 0
-frameRate = 1 / 12 # 12 FPS
-count=1
-success = getFrame(sec)
-
-while success:
-    count = count + 1
-    sec = sec + frameRate
-    sec = round(sec, 2)
-    success = getFrame(sec)
-
-print("Frame Extraction Finished")
-print("Nordifying Images")
-go_nord = GoNord()
-for img in list_imgs:
-    image = go_nord.open_image(os.path.join('images', img))
-    go_nord.convert_image(image, save_path=f'images/{img}')
-
-print("Successfully Nordified")
-print("Converting to video")
-
-img = []
-for image in list_imgs:
-    img.append(cv2.imread(os.path.join('images', image)))
-
-height,width,layers=img[1].shape
-
-video=cv2.VideoWriter('video.avi',cv2.VideoWriter_fourcc(*'MP42'),1/12,(width,height))
-for image in img:
-    video.write(image)
-
-cv2.destroyAllWindows()
-video.release()
-'''
+if __name__ == "__main__":
+    main()
