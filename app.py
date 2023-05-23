@@ -1,9 +1,6 @@
-# from ImageGoNord import NordPaletteFile, GoNord
 import ffmpeg
 import numpy as np
-import sys
 from PIL import Image, ImageColor
-import os
 from datetime import datetime
 
 def assemble_video(input_dir, output_dir = '.'):
@@ -16,7 +13,7 @@ def assemble_video(input_dir, output_dir = '.'):
     '''
     (
         ffmpeg
-        .input(f'{input_dir}/*.jpg', pattern_type='glob', framerate=25)
+        .input(f'{input_dir}/*.jpg', pattern_type='glob')
         .output(f'{output_dir}/movie.gif', loglevel='quiet')
         .run()
     )
@@ -57,10 +54,6 @@ def convert_vid_to_np_arr(video_path):
     )
 
     video_np_arr = (
-        # np.array(img.resize((int(width/4), int(height/4)), Image.LANCZOS))
-        # np
-        # .frombuffer(out, np.uint8)
-        # .reshape([-1, height, width, 3])
          np.array(
         np.frombuffer(out, np.uint8)
                  .reshape([-1, height, width, 3]))
@@ -89,27 +82,28 @@ def main():
     "#ECEFF4FF"
     ]
 
+    start_time = datetime.now()
+
     # convert color palette to np array
     nord_palette = np.array(
         [np.array(ImageColor.getrgb(color)) for color in nord_palette]
     )
-    start_time = datetime.now()
 
     np_arr = convert_vid_to_np_arr('video/luffy.gif')
 
     converted_array = np.zeros(
             (np_arr.shape[0],np_arr.shape[1],np_arr.shape[2],np_arr.shape[3] + 1)
         ) if np_arr[0].shape[2] == 3 else np.zeros(np_arr.shape)
+    
     for ind, frame in enumerate(np_arr):
         converted_array[ind] = convert_palette(nord_palette, frame)
         (
             Image
-            .fromarray((converted_array[ind] * 255).astype(np.uint8))
-            .save(f'images/frame{str(ind).zfill(len(str(len(converted_array))))}.png')
+            .fromarray((converted_array[ind]).astype(np.uint8))
+            .convert('RGB')
+            .save(f'images/frame{str(ind).zfill(len(str(len(converted_array))))}.jpg')
         )
-    # for ind in range(len(np_arr)):
-    # nordify()
-    # assemble_video('images')
+    assemble_video('images')
 
     print('Duration: {}'.format(datetime.now() - start_time))
 
