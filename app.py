@@ -3,7 +3,7 @@ import numpy as np
 from PIL import Image, ImageColor
 from datetime import datetime
 
-def assemble_video(input_dir, output_dir = '.'):
+def assemble_video(input_dir, num_frames, output_dir = '.'):
     '''
     Assemble video from sequence of frames
 
@@ -11,10 +11,12 @@ def assemble_video(input_dir, output_dir = '.'):
 
     output_dir: Saves video to location. Defaults to base directory.
     '''
+    num_frames = len(str(num_frames))
     (
         ffmpeg
-        .input(f'{input_dir}/*.jpg', pattern_type='glob')
-        .output(f'{output_dir}/movie.gif', loglevel='quiet')
+        # .input(f'{input_dir}/*.jpg', pattern_type='glob')
+        .input(f'{input_dir}/frame%0{num_frames}d.jpg')
+        .output(f'{output_dir}/movie.mp4', loglevel='quiet')
         .run()
     )
 
@@ -89,7 +91,7 @@ def main():
         [np.array(ImageColor.getrgb(color)) for color in nord_palette]
     )
 
-    np_arr = convert_vid_to_np_arr('video/luffy.gif')
+    np_arr = convert_vid_to_np_arr('video/pinit.mp4')
 
     converted_array = np.zeros(
             (np_arr.shape[0],np_arr.shape[1],np_arr.shape[2],np_arr.shape[3] + 1)
@@ -103,7 +105,7 @@ def main():
             .convert('RGB')
             .save(f'images/frame{str(ind).zfill(len(str(len(converted_array))))}.jpg')
         )
-    assemble_video('images')
+    assemble_video('images', len(np_arr))
 
     print('Duration: {}'.format(datetime.now() - start_time))
 
