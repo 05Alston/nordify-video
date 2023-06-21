@@ -3,6 +3,21 @@ import numpy as np
 from PIL import Image, ImageColor
 from datetime import datetime
 
+def paletteuse():
+    (
+        ffmpeg
+        .filter(
+            [
+                ffmpeg.input('video/pinit.mp4'), 
+                ffmpeg.input('nord-palette.png')
+            ],
+            filter_name='paletteuse', 
+            dither='none'
+        )
+        .output('paletteuse_none.mp4', loglevel='quiet')# , vframes=1, format='image2', vcodec='mjpeg'
+        .run(overwrite_output=True)
+    )
+
 def assemble_video(input_dir, num_frames, output_dir = '.'):
     '''
     Assemble video from sequence of frames
@@ -14,7 +29,6 @@ def assemble_video(input_dir, num_frames, output_dir = '.'):
     num_frames = len(str(num_frames))
     (
         ffmpeg
-        # .input(f'{input_dir}/*.jpg', pattern_type='glob')
         .input(f'{input_dir}/frame%0{num_frames}d.jpg')
         .output(f'{output_dir}/movie.mp4', loglevel='quiet')
         .run()
@@ -23,8 +37,8 @@ def assemble_video(input_dir, num_frames, output_dir = '.'):
 def convert_palette(palette, img_array):
     
     # if the image doesn't have an alpha channel, add one with all 255s
-    if img_array.shape[2] == 3:
-        img_array = np.concatenate((img_array, np.full((img_array.shape[0], img_array.shape[1], 1), 255)), axis=2)
+    # if img_array.shape[2] == 3:
+    #     img_array = np.concatenate((img_array, np.full((img_array.shape[0], img_array.shape[1], 1), 255)), axis=2)
     
     # create a new array to hold the pixelated image
     pixelated_array = np.zeros(img_array.shape)
@@ -42,6 +56,12 @@ def convert_palette(palette, img_array):
     
     return pixelated_array
 
+def clear_lines(lines = 1):
+    LINE_UP = '\033[1A'
+    LINE_CLEAR = '\x1b[2K'
+    for idx in range(lines):
+        print(LINE_UP, end=LINE_CLEAR)
+
 def convert_vid_to_np_arr(video_path):
     probe = ffmpeg.probe(video_path)
     video_stream = next((stream for stream in probe['streams'] if stream['codec_type'] == 'video'), None)
@@ -56,15 +76,17 @@ def convert_vid_to_np_arr(video_path):
     )
 
     video_np_arr = (
-         np.array(
-        np.frombuffer(out, np.uint8)
-                 .reshape([-1, height, width, 3]))
+        np
+        .frombuffer(out, np.uint8)
+        .reshape([-1, height, width, 3])
     )
 
     return video_np_arr
 
 
 def main():
+    paletteuse()
+    return
     nord_palette = [
     "#BF616AFF",
     "#D08770FF",
@@ -91,20 +113,25 @@ def main():
         [np.array(ImageColor.getrgb(color)) for color in nord_palette]
     )
 
-    np_arr = convert_vid_to_np_arr('video/pinit.mp4')
+    np_arr = convert_vid_to_np_arr('video/one-piece.mp4')
 
-    converted_array = np.zeros(
-            (np_arr.shape[0],np_arr.shape[1],np_arr.shape[2],np_arr.shape[3] + 1)
-        ) if np_arr[0].shape[2] == 3 else np.zeros(np_arr.shape)
-    
     for ind, frame in enumerate(np_arr):
-        converted_array[ind] = convert_palette(nord_palette, frame)
         (
             Image
-            .fromarray((converted_array[ind]).astype(np.uint8))
+            .fromarray(
+                (
+                    convert_palette(
+                        nord_palette, 
+                        frame
+                    )
+                )
+                .astype(np.uint8)
+            )
             .convert('RGB')
-            .save(f'images/frame{str(ind).zfill(len(str(len(converted_array))))}.jpg')
+            .save(f'images/frame{str(ind).zfill(len(str(len(np_arr))))}.jpg')
         )
+        print(f'Processed: {ind + 1} / {len(np_arr)}')
+        clear_lines()
     assemble_video('images', len(np_arr))
 
     print('Duration: {}'.format(datetime.now() - start_time))
