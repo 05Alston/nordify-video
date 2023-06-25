@@ -36,10 +36,6 @@ def assemble_video(input_dir, num_frames, output_dir = '.'):
 
 def convert_palette(palette, img_array):
     
-    # if the image doesn't have an alpha channel, add one with all 255s
-    # if img_array.shape[2] == 3:
-    #     img_array = np.concatenate((img_array, np.full((img_array.shape[0], img_array.shape[1], 1), 255)), axis=2)
-    
     # create a new array to hold the pixelated image
     pixelated_array = np.zeros(img_array.shape)
 
