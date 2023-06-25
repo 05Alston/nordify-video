@@ -8,16 +8,16 @@ A video palette converter inspired by Schrodinger-Hat's [ImageGoNord](https://gi
 
 #### Requirements
 
-    - ffmpeg already installed
-    - Run the pip command `pip install ffmpeg-python Pillow numpy`
-    - Run `python app.py`
+- ffmpeg already installed
+- Run the pip command `pip install ffmpeg-python Pillow numpy`
+- Run `python app.py`
 
 ### non-ffmpeg version
 
 #### Requirements
 
-    - Run the pip command `pip install Pillow numpy` 
-    - Run `python noff.py`
+- Run the pip command `pip install Pillow numpy` 
+- Run `python noff.py`
 
 |Original Video|  
 |--|  
