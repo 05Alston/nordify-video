@@ -8,7 +8,7 @@ def paletteuse():
         ffmpeg
         .filter(
             [
-                ffmpeg.input('video/pinit.mp4'), 
+                ffmpeg.input('video/one-piece.mp4'), 
                 ffmpeg.input('nord-palette.png')
             ],
             filter_name='paletteuse', 
