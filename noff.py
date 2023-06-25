@@ -2,6 +2,7 @@ import ffmpeg
 import numpy as np
 from PIL import Image
 from datetime import datetime
+import argparse
 
 def convert_vid_to_np_arr(video_path):
     '''
@@ -27,11 +28,11 @@ def convert_vid_to_np_arr(video_path):
 
     return video_np_arr
 
-def convert_palette(color_cube,image):
+def convert_palette(color_cube, image):
     '''
     Convert each frame to desired color palette.
 
-    color_cube: 
+    color_cube: Color cube created from the palette
 
     image: Current frame.
     '''
@@ -42,7 +43,7 @@ def convert_palette(color_cube,image):
    
     return new_image.reshape(shape[0],shape[1],3).astype(np.uint8)
 
-def assemble_video(input_dir, num_frames, output_dir = '.'):
+def assemble_video(input_dir, num_frames, output_path):
     '''
     Assemble video from sequence of frames
     '''
@@ -50,52 +51,57 @@ def assemble_video(input_dir, num_frames, output_dir = '.'):
     (
         ffmpeg
         .input(f'{input_dir}/frame%0{num_frames}d.jpg')
-        .output(f'{output_dir}/movie.mp4', loglevel='quiet')
+        .output(f'{output_path}', loglevel='quiet')
         .run()
     )
 
 def clear_lines(lines = 1):
-    ''' Clear the last 'n' lines '''
+    ''' 
+    Clear the last 'n' lines
+    '''
     LINE_UP = '\033[1A'
     LINE_CLEAR = '\x1b[2K'
     for idx in range(lines):
         print(LINE_UP, end=LINE_CLEAR)
 
-def main():
-    nord_palette = np.array([[191, 97, 106],
-        [208, 135, 112],
-        [235, 203, 139],
-        [163, 190, 140],
-        [180, 142, 173],
-        [143, 188, 187],
-        [136, 192, 208],
-        [129, 161, 193],
-        [94, 129, 172],
-        [46, 52,  64],
-        [59, 66,  82],
-        [67, 76,  94],
-        [76, 86, 106],
-        [216, 222, 233],
-        [229, 233, 240],
-        [236, 239, 244]])
+def main(_input, _output):
+    nord_palette = np.array(
+        [[46, 52,  64], # nord 0
+        [59, 66,  82], # nord 1
+        [67, 76,  94], # nord 2
+        [76, 86, 106], # nord 3
+        [216, 222, 233], # nord 4
+        [229, 233, 240], # nord 5
+        [236, 239, 244], # nord 6
+        [143, 188, 187], # nord 7
+        [136, 192, 208], # nord 8
+        [129, 161, 193], # nord 9
+        [94, 129, 172], # nord 10
+        [191, 97, 106], # nord 11
+        [208, 135, 112], # nord 12
+        [235, 203, 139], # nord 13
+        [163, 190, 140], # nord 14
+        [180, 142, 173] # nord 15
+        ])
 
     start_time = datetime.now()
+    # Only run once to generate the color cube file
     try:
         # for all colors (256*256*256) assign color from palette
-        precalculated = np.load('view.npz')['color_cube']
+        precalculated = np.load('nord.npz')['color_cube']
     except:
         precalculated = np.zeros(shape=[256,256,256,3])
         for i in range(256):
-            print("processing %0.2f" %(100 * i / 256))
+            print(f"building color palette: %0.2f%%" %(100 * i / 256))
             clear_lines()
             for j in range(256):
                 for k in range(256):
                     index = np.argmin(np.sqrt(np.sum(((nord_palette)-np.array([i,j,k]))**2,axis=1)))
                     precalculated[i,j,k] = nord_palette[index]
-        print('processing 100%')
-        np.savez_compressed('view', color_cube = precalculated)
+        print('building color palette: 100%')
+        np.savez_compressed('nord', color_cube = precalculated)
 
-    np_arr = convert_vid_to_np_arr('video/one-piece.mp4')
+    np_arr = convert_vid_to_np_arr(_input)
 
     for ind, frame in enumerate(np_arr):
         (
@@ -112,8 +118,22 @@ def main():
         print(f'Processed: {ind + 1} / {len(np_arr)} frames')
         clear_lines()
     print(f'Processed: {len(np_arr)} / {len(np_arr)} frames')
-    assemble_video('images', len(np_arr))
-    print('Duration: {}'.format(datetime.now() - start_time))
+    assemble_video('images', len(np_arr), _output)
+    print(f'Duration: {datetime.now() - start_time}')
 
 if __name__ == "__main__":
-    main()
+    a = argparse.ArgumentParser()
+    a.add_argument("input", metavar='input', type=str, help="input filename")
+    a.add_argument("-o", "--output", metavar='output', type=str, help="output filename", default='movie.mp4')
+    args = a.parse_args()
+    input = args.input
+    output = args.output
+    main(input, output)
+
+
+
+
+'''
+different filename & format: python noff.py -i input.file -o output.file
+same filename & format: python noff.py -i input.file
+'''
