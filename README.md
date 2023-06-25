@@ -22,9 +22,11 @@ A video palette converter inspired by Schrodinger-Hat's [ImageGoNord](https://gi
 |Original Video|  
 |--|  
 |![original video](assets/original.gif)|  
+
 |ffmpeg converted version|  
 |--|  
 |![ffmpeg converted video](assets/ffmpeg.gif)|  
+
 |Non ffmpeg converted version|  
 |--|  
 |![non ffmpeg converted video](assets/no_ffmpeg.gif)|  
