@@ -1,23 +1,30 @@
 # nordify-video
 
-A video palette converter inspired by Schrodinger-Hat's [ImageGoNord](https://github.com/Schrodinger-Hat/ImageGoNord)
+A video palette converter inspired by Schrodinger-Hat's [ImageGoNord](https://github.com/Schrodinger-Hat/ImageGoNord)  
+
+PS: Even in non-ffmpeg version, only the palette conversion algorithm is free of ffmpeg code. ffmpeg is currently being used to get the video stream and also to convert individual frames to video format. I am looking for a way to remove this dependency.
 
 ## Installation
 
-### ffmpeg version
-
-#### Requirements
+### Requirements
 
 - ffmpeg already installed
-- Run the pip command `pip install ffmpeg-python Pillow numpy`
+- Run the pip command `pip install ffmpeg-python numpy`
 - Run `python app.py`
 
-### non-ffmpeg version
+#### ffmpeg version
 
-#### Requirements
+- Run `python app.py`
 
-- Run the pip command `pip install Pillow numpy` 
+#### non-ffmpeg version
+
 - Run `python noff.py`
+
+## TODO
+
+- Find a way to get video stream as numpy array in noff.py
+
+## Example
 
 |Original Video|  
 |--|  

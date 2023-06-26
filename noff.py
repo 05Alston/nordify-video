@@ -1,6 +1,5 @@
 import ffmpeg
 import numpy as np
-from PIL import Image
 from datetime import datetime
 import argparse
 
@@ -12,6 +11,7 @@ def convert_vid_to_np_arr(video_path):
     video_stream = next((stream for stream in probe['streams'] if stream['codec_type'] == 'video'), None)
     width = int(video_stream['width'])
     height = int(video_stream['height'])
+    framerate = video_stream['avg_frame_rate'].split('/')[0]
 
     out, _ = (
         ffmpeg
@@ -26,7 +26,7 @@ def convert_vid_to_np_arr(video_path):
         .reshape([-1, height, width, 3])
     )
 
-    return video_np_arr
+    return video_np_arr, framerate
 
 def convert_palette(color_cube, image):
     '''
@@ -54,6 +54,30 @@ def assemble_video(input_dir, num_frames, output_path):
         .output(f'{output_path}', loglevel='quiet')
         .run()
     )
+
+def vidwrite(fn, images, cube, framerate=60, vcodec='libx264'):
+    if not isinstance(images, np.ndarray):
+        images = np.asarray(images)
+    _,height,width,_ = images.shape
+    process = (
+        ffmpeg
+            .input('pipe:', format='rawvideo', pix_fmt='rgb24', s='{}x{}'.format(width, height), r=framerate)
+            .output(fn, pix_fmt='yuv420p', vcodec=vcodec, r=framerate)
+            .overwrite_output()
+            .run_async(pipe_stdin=True, overwrite_output=True, pipe_stderr=True)
+    )
+    for ind, frame in enumerate(images):
+        try:
+            process.stdin.write(
+                convert_palette(cube, frame).astype(np.uint8).tobytes()
+            )
+            print(f'Processed: {ind + 1} / {len(images)} frames')
+            clear_lines()
+        except Exception as e:
+            print(e)
+            process.stdin.close()
+            process.wait()
+            return
 
 def clear_lines(lines = 1):
     ''' 
@@ -101,24 +125,10 @@ def main(_input, _output):
         print('building color palette: 100%')
         np.savez_compressed('nord', color_cube = precalculated)
 
-    np_arr = convert_vid_to_np_arr(_input)
+    np_arr, rate = convert_vid_to_np_arr(_input)
+    vidwrite(_output, np_arr, precalculated, rate, vcodec='libx264')
 
-    for ind, frame in enumerate(np_arr):
-        (
-            Image
-            .fromarray(
-                    convert_palette(
-                        precalculated, 
-                        frame
-                    )
-            )
-            .convert('RGB')
-            .save(f'images/frame{str(ind).zfill(len(str(len(np_arr))))}.jpg')
-        )
-        print(f'Processed: {ind + 1} / {len(np_arr)} frames')
-        clear_lines()
     print(f'Processed: {len(np_arr)} / {len(np_arr)} frames')
-    assemble_video('images', len(np_arr), _output)
     print(f'Duration: {datetime.now() - start_time}')
 
 if __name__ == "__main__":
@@ -126,11 +136,9 @@ if __name__ == "__main__":
     a.add_argument("input", metavar='input', type=str, help="input filename")
     a.add_argument("-o", "--output", metavar='output', type=str, help="output filename", default='movie.mp4')
     args = a.parse_args()
-    input = args.input
-    output = args.output
-    main(input, output)
-
-
+    _input = args.input
+    _output = args.output
+    main(_input, _output)
 
 
 '''
