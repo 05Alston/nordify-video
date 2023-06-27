@@ -3,16 +3,30 @@ import numpy as np
 from datetime import datetime
 import argparse
 
-def convert_vid_to_np_arr(video_path):
+
+def get_video_information(video_path):
     '''
-    Convert video to array of numpy elements  
+    Get basic information about the video file.
+
+    video_path: Relative/Absolute path of input video file
     '''
     probe = ffmpeg.probe(video_path)
     video_stream = next((stream for stream in probe['streams'] if stream['codec_type'] == 'video'), None)
     width = int(video_stream['width'])
     height = int(video_stream['height'])
     framerate = video_stream['avg_frame_rate'].split('/')[0]
+    duration = video_stream['duration']
 
+    print(int(video_stream['nb_frames']), int( float(framerate) * float(duration) ) )
+
+    return width, height, framerate, duration
+
+def convert_vid_to_np_arr(video_path, width, height, start_time):
+    '''
+    Convert video to array of numpy elements.
+
+    video_path: Relative/Absolute path of input video file
+    '''
     out, _ = (
         ffmpeg
         .input(video_path)
@@ -26,7 +40,7 @@ def convert_vid_to_np_arr(video_path):
         .reshape([-1, height, width, 3])
     )
 
-    return video_np_arr, framerate
+    return video_np_arr
 
 def convert_palette(color_cube, image):
     '''
@@ -43,12 +57,12 @@ def convert_palette(color_cube, image):
    
     return new_image.reshape(shape[0],shape[1],3).astype(np.uint8)
 
-def assemble_video(input_dir, num_frames, output_path):
+def assemble_video(input_dir, num_frames, output):
     num_frames = len(str(num_frames))
     (
         ffmpeg
         .input(f'{input_dir}/frame%0{num_frames}d.jpg')
-        .output(f'{output_path}', loglevel='quiet')
+        .output(f'{output}', loglevel='quiet')
         .run()
     )
 
@@ -86,7 +100,28 @@ def clear_lines(lines = 1):
     for idx in range(lines):
         print(LINE_UP, end=LINE_CLEAR)
 
+def generate_color_map(palette, palette_name):
+    '''
+    Generate a color cube.
+
+    palette: Numpy array which contains the complete color palette.
+
+    palette_name: Name of the color palette.
+    '''
+    precalculated = np.zeros(shape=[256,256,256,3])
+    for i in range(256):
+        print(f"building color palette: %0.2f%%" %(100 * i / 256))
+        clear_lines()
+        for j in range(256):
+            for k in range(256):
+                index = np.argmin(np.sqrt(np.sum(((palette)-np.array([i,j,k]))**2,axis=1)))
+                precalculated[i,j,k] = palette[index]
+    print('building color palette: 100%')
+    np.savez_compressed(palette_name, color_cube = precalculated)
+
 def main(_input, _output):
+    start_time = datetime.now()
+
     nord_palette = np.array(
         [[46, 52,  64], # nord 0
         [59, 66,  82], # nord 1
@@ -103,28 +138,35 @@ def main(_input, _output):
         [208, 135, 112], # nord 12
         [235, 203, 139], # nord 13
         [163, 190, 140], # nord 14
-        [180, 142, 173] # nord 15
-        ])
+        [180, 142, 173]] # nord 15
+    )
 
-    start_time = datetime.now()
-    # Only run once to generate the color cube file
+    palette_name = 'nord'
+    # run once to generate the color map file
     try:
         # for all colors (256*256*256) assign color from palette
-        precalculated = np.load('nord.npz')['color_cube']
+        precalculated = np.load(f'{palette_name}.npz')['color_cube']
     except:
-        precalculated = np.zeros(shape=[256,256,256,3])
-        for i in range(256):
-            print(f"building color palette: %0.2f%%" %(100 * i / 256))
-            clear_lines()
-            for j in range(256):
-                for k in range(256):
-                    index = np.argmin(np.sqrt(np.sum(((nord_palette)-np.array([i,j,k]))**2,axis=1)))
-                    precalculated[i,j,k] = nord_palette[index]
-        print('building color palette: 100%')
-        np.savez_compressed('nord', color_cube = precalculated)
+       generate_color_map(nord_palette, palette_name)
+
+    width, height, framerate, duration = get_video_information(_input)
 
     np_arr, rate = convert_vid_to_np_arr(_input)
-    vidwrite(_output, np_arr, precalculated, rate, vcodec='libx264')
+    return
+    for ind, frame in enumerate(np_arr):
+        (
+            Image
+                .fromarray(
+                    convert_palette(
+                        precalculated, 
+                        frame
+                    )
+                )
+                .convert('RGB')
+                .save(f'images/frame{str(ind).zfill(len(str(len(np_arr))))}.jpg')
+        )
+    # vidwrite(_output, np_arr, precalculated, rate, vcodec='libx264')
+    assemble_video('images', np_arr.shape[0], _output)
 
     print(f'Processed: {len(np_arr)} / {len(np_arr)} frames')
     print(f'Duration: {datetime.now() - start_time}')
@@ -137,3 +179,20 @@ if __name__ == "__main__":
     _input = args.input
     _output = args.output
     main(_input, _output)
+
+
+'''
+for ind, frame in enumerate(np_arr):
+    (
+        Image
+            .fromarray(
+                convert_palette(
+                    precalculated, 
+                    frame
+                )
+            )
+            .convert('RGB')
+            .save(f'images/frame{str(ind).zfill(len(str(len(np_arr))))}.jpg')
+    )
+
+'''
