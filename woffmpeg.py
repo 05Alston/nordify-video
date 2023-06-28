@@ -2,7 +2,10 @@ import ffmpeg
 import numpy as np
 from datetime import datetime
 import argparse
-
+from PIL import Image
+import subprocess as sp
+import resource
+import sys
 
 def get_video_information(video_path):
     '''
@@ -11,32 +14,48 @@ def get_video_information(video_path):
     video_path: Relative/Absolute path of input video file
     '''
     probe = ffmpeg.probe(video_path)
-    video_stream = next((stream for stream in probe['streams'] if stream['codec_type'] == 'video'), None)
+    video_stream = next(
+            (stream for stream in probe['streams'] if stream['codec_type'] == 'video'),
+            None)
+
     width = int(video_stream['width'])
     height = int(video_stream['height'])
     framerate = video_stream['avg_frame_rate'].split('/')[0]
     duration = video_stream['duration']
+    total_frames = video_stream['nb_frames']
 
-    print(int(video_stream['nb_frames']), int( float(framerate) * float(duration) ) )
+    return int(width), int(height), int(framerate), float(duration), int(total_frames)
 
-    return width, height, framerate, duration
-
-def convert_vid_to_np_arr(video_path, width, height, start_time):
+def convert_vid_to_np_arr(video_path, width, height, start_time, duration):
     '''
     Convert video to array of numpy elements.
 
     video_path: Relative/Absolute path of input video file
-    '''
-    out, _ = (
-        ffmpeg
-        .input(video_path)
-        .output('pipe:', format='rawvideo', pix_fmt='rgb24', loglevel='quiet')
-        .run(capture_stdout=True)
-    )
 
+    width: Width of video(numpy array width)
+
+    height: Height of video(numpy array depth)
+
+    start_time: Time to seek forward in the video
+
+    duration: Number of frames to capture
+    '''
+    command = [ 'ffmpeg',
+            '-ss', str(start_time), # seek time
+            '-i', video_path, # input path
+            '-pix_fmt', 'rgb24', # pixel format
+            '-f', 'rawvideo', # video format
+            '-t', str(duration), # duration/ number of frames
+            '-loglevel', 'quiet', # log level
+            'pipe:' ] # output
+
+    # Run the above command and output the result to stdout
+    process = sp.run(command, stdout=sp.PIPE, bufsize=10**8)
+
+    # Generate numpy array from stdout
     video_np_arr = (
         np
-        .frombuffer(out, np.uint8)
+        .frombuffer(process.stdout, dtype = np.uint8)
         .reshape([-1, height, width, 3])
     )
 
@@ -52,47 +71,27 @@ def convert_palette(color_cube, image):
     '''
     shape = image.shape[0:2]
     indices = image.reshape(-1,3)
-    # pass image colors and retrieve corresponding palette color
+    # Pass image colors and retrieve corresponding palette color
     new_image = color_cube[indices[:,0],indices[:,1],indices[:,2]]
-   
+
     return new_image.reshape(shape[0],shape[1],3).astype(np.uint8)
 
-def assemble_video(input_dir, num_frames, output):
+def assemble_video(input_dir, num_frames, framerate, output):
     num_frames = len(str(num_frames))
-    (
-        ffmpeg
-        .input(f'{input_dir}/frame%0{num_frames}d.jpg')
-        .output(f'{output}', loglevel='quiet')
-        .run()
-    )
 
-def vidwrite(fn, images, cube, framerate=60, vcodec='libx264'):
-    '''
-    Assemble video from sequence of frames
-    '''
-    _,height,width,_ = images.shape
-    process = (
-        ffmpeg
-            .input('pipe:', format='rawvideo', pix_fmt='rgb24', s='{}x{}'.format(width, height), r=framerate)
-            .output(fn, pix_fmt='yuv420p', vcodec=vcodec, r=framerate)
-            .overwrite_output()
-            .run_async(pipe_stdin=True, overwrite_output=True, pipe_stderr=True)
-    )
-    for ind, frame in enumerate(images):
-        try:
-            process.stdin.write(
-                convert_palette(cube, frame).astype(np.uint8).tobytes()
-            )
-            print(f'Processed: {ind + 1} / {len(images)} frames')
-            clear_lines()
-        except Exception as e:
-            print(e)
-            process.stdin.close()
-            process.wait()
-            return
+    command = ['ffmpeg',
+               '-framerate', str(framerate),
+               '-i', f'{input_dir}/frame%0{num_frames}d.jpg',
+               '-pix_fmt', 'yuv420p',
+               '-c:v', 'libx264',
+               '-y',
+               '-loglevel', 'quiet',
+               output]
+
+    sp.run(command)
 
 def clear_lines(lines = 1):
-    ''' 
+    '''
     Clear the last 'n' lines
     '''
     LINE_UP = '\033[1A'
@@ -114,7 +113,10 @@ def generate_color_map(palette, palette_name):
         clear_lines()
         for j in range(256):
             for k in range(256):
-                index = np.argmin(np.sqrt(np.sum(((palette)-np.array([i,j,k]))**2,axis=1)))
+                index = np.argmin(np.sqrt(np.sum(
+                        ((palette)-np.array([i,j,k]))**2,
+                        axis=1
+                    )))
                 precalculated[i,j,k] = palette[index]
     print('building color palette: 100%')
     np.savez_compressed(palette_name, color_cube = precalculated)
@@ -149,27 +151,41 @@ def main(_input, _output):
     except:
        generate_color_map(nord_palette, palette_name)
 
-    width, height, framerate, duration = get_video_information(_input)
+    # Initialize variables for conversion
+    width, height, framerate, duration, total_frames = get_video_information(_input)
+    frames_per_batch = 300
+    ind = 0
+    timestamp = 0
+    batch_dur = frames_per_batch / framerate
+    batch_dur = batch_dur if duration > batch_dur else duration
+    print('####VIDEO INFORMATION#####')
+    print(f'Width: {width}')
+    print(f'Height: {height}')
+    print(f'Duration: {duration} s')
+    print(f'Processed: {ind} / {total_frames} frames')
 
-    np_arr, rate = convert_vid_to_np_arr(_input)
-    return
-    for ind, frame in enumerate(np_arr):
-        (
-            Image
-                .fromarray(
-                    convert_palette(
-                        precalculated, 
-                        frame
+    # Process the entire video in batches of `frames_per_batch` frames
+    while ind < total_frames:
+        np_arr = convert_vid_to_np_arr(_input, width, height, timestamp, batch_dur)
+
+        for frame in np_arr:
+            (
+                Image.fromarray(
+                    convert_palette(precalculated, frame)
                     )
-                )
                 .convert('RGB')
-                .save(f'images/frame{str(ind).zfill(len(str(len(np_arr))))}.jpg')
-        )
-    # vidwrite(_output, np_arr, precalculated, rate, vcodec='libx264')
-    assemble_video('images', np_arr.shape[0], _output)
+                .save(f'images/frame{str(ind).zfill(len(str(total_frames)))}.jpg')
+                )
+            ind += 1
+            clear_lines()
+            print(f'Processed: {ind} / {total_frames} frames')
+        duration -= batch_dur
+        timestamp += batch_dur 
+        batch_dur = batch_dur if duration > batch_dur else duration
 
-    print(f'Processed: {len(np_arr)} / {len(np_arr)} frames')
-    print(f'Duration: {datetime.now() - start_time}')
+    assemble_video('images', total_frames, framerate, _output)
+    print(f'Memory used: {resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024} Mbs') # Mbs
+    print(f'Total running duration: {datetime.now() - start_time}')
 
 if __name__ == "__main__":
     a = argparse.ArgumentParser()
@@ -180,19 +196,3 @@ if __name__ == "__main__":
     _output = args.output
     main(_input, _output)
 
-
-'''
-for ind, frame in enumerate(np_arr):
-    (
-        Image
-            .fromarray(
-                convert_palette(
-                    precalculated, 
-                    frame
-                )
-            )
-            .convert('RGB')
-            .save(f'images/frame{str(ind).zfill(len(str(len(np_arr))))}.jpg')
-    )
-
-'''
