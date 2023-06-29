@@ -4,8 +4,7 @@ from datetime import datetime
 import argparse
 from PIL import Image
 import subprocess as sp
-import resource
-import sys
+# import resource
 
 def get_video_information(video_path):
     '''
@@ -77,6 +76,9 @@ def convert_palette(color_cube, image):
     return new_image.reshape(shape[0],shape[1],3).astype(np.uint8)
 
 def assemble_video(input_dir, num_frames, framerate, output):
+    '''
+    Convert the images to video
+    '''
     num_frames = len(str(num_frames))
 
     command = ['ffmpeg',
@@ -93,6 +95,8 @@ def assemble_video(input_dir, num_frames, framerate, output):
 def clear_lines(lines = 1):
     '''
     Clear the last 'n' lines
+
+    lines: Number of terminal lines to go up.
     '''
     LINE_UP = '\033[1A'
     LINE_CLEAR = '\x1b[2K'
@@ -161,7 +165,7 @@ def main(_input, _output):
     print('####VIDEO INFORMATION#####')
     print(f'Width: {width}')
     print(f'Height: {height}')
-    print(f'Duration: {duration} s')
+    print(f'Duration: {duration} s\n')
     print(f'Processed: {ind} / {total_frames} frames')
 
     # Process the entire video in batches of `frames_per_batch` frames
@@ -183,8 +187,11 @@ def main(_input, _output):
         timestamp += batch_dur 
         batch_dur = batch_dur if duration > batch_dur else duration
 
+    print(f'Converting duration: {datetime.now() - start_time}')
+    inter_time = datetime.now()
     assemble_video('images', total_frames, framerate, _output)
-    print(f'Memory used: {resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024} Mbs') # Mbs
+    print(f'Assembly duration: {datetime.now() - inter_time}')
+    # print(f'Memory used: {resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024} Mbs')
     print(f'Total running duration: {datetime.now() - start_time}')
 
 if __name__ == "__main__":
