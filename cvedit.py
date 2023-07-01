@@ -2,8 +2,9 @@ import argparse
 import numpy as np
 import cv2
 import os
-import resource
-from moviepy.editor import VideoFileClip, concatenate_videoclips
+from datetime import datetime
+import subprocess
+# from moviepy.editor import VideoFileClip, concatenate_videoclips
 
 def get_video_information(video_path):
     '''
@@ -44,7 +45,7 @@ def get_video_information(video_path):
 
     return width, height, fps, duration, total_frames
 
-def convert_vid_to_np_arr(video_path, cube, width, height, start_frame, duration):
+def convert_vid_to_np_arr(video_path, cube, start_frame, duration):
     '''
     Convert video to array of numpy elements.
 
@@ -60,9 +61,9 @@ def convert_vid_to_np_arr(video_path, cube, width, height, start_frame, duration
     '''
 
     frames = []
-
     cap = cv2.VideoCapture(video_path)
     cap.set(cv2.CAP_PROP_POS_FRAMES, start_frame)
+    total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
     curr = 0
     success, image = cap.read()
 
@@ -70,7 +71,8 @@ def convert_vid_to_np_arr(video_path, cube, width, height, start_frame, duration
         image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
         image = convert_palette(cube, image)
         frames.append(image)
-        print(int(cap.get(cv2.CAP_PROP_POS_FRAMES)))
+        frame_num = int(cap.get(cv2.CAP_PROP_POS_FRAMES))
+        print(f'Frame: {frame_num}/{total_frames}')
         clear_lines()
         curr += 1
         cap.set(cv2.CAP_PROP_POS_FRAMES, start_frame + curr) 
@@ -119,28 +121,31 @@ def write_video(filename, vid_list, width, height, fps):
     
     codec_id = "mp4v" # ID for a video codec.
     fourcc = cv2.VideoWriter_fourcc(*codec_id)
-    out = cv2.VideoWriter(filename, fourcc=fourcc, fps=20, frameSize=(width, height))
+    out = cv2.VideoWriter(filename, fourcc=fourcc, fps=fps, frameSize=(width, height))
 
     for frame in vid_list:
         frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         out.write(frame)
     out.release()
 
-def concat_video(vid1, vid2, _output):
-    clip1 = VideoFileClip(vid1)
-    clip2 = VideoFileClip(vid2)
-    final_clip = concatenate_videoclips([clip1,clip2])
-    final_clip.write_videofile(_output)
-
-#def concat_video(vid1, vid2, _output):
-#    command = [
-#            'ffmpeg',
-#            '-f', 'concat',
-#            '-i', 'list.txt',
-#            '-c', 'copy',
-#            'out.mp4'
-#            ]
-#    subprocess.run(command)
+def concat_video():
+    command = [
+        'ffmpeg',
+        '-f', 'concat',
+        '-i', 'vids.txt',
+        '-c', 'copy',
+        '-loglevel', 'quiet',
+        '-y',
+        'temp/output.mp4'
+    ]
+    subprocess.run(command)
+    # clip1 = VideoFileClip('temp/out.mp4')
+    # clip2 = VideoFileClip('temp/temp.mp4')
+    # final_clip = concatenate_videoclips([clip1,clip2])
+    # final_clip.write_videofile('temp/output.mp4', logger=None)
+    os.remove('temp/out.mp4')
+    os.remove('temp/temp.mp4')
+    os.rename('temp/output.mp4', 'temp/out.mp4')
 
 def clear_lines(lines = 1):
     '''
@@ -154,6 +159,7 @@ def clear_lines(lines = 1):
         print(LINE_UP, end=LINE_CLEAR)
 
 def main(_input):
+    start_time = datetime.now()
     nord_palette = np.array(
         [[46, 52,  64], # nord 0
         [59, 66,  82], # nord 1
@@ -188,21 +194,19 @@ def main(_input):
     except:
         generate_color_map(nord_palette, palette_name)
     frame_number = 0
-    frames_per_batch = 100
+    frames_per_batch = 400
     while frame_number < total_frames:
-        frame_list = convert_vid_to_np_arr(_input, precalculated, width, height, frame_number, frames_per_batch)
-        #print(np_array.size * np_array.itemsize)
-        if os.path.exists('out.mp4'):
-            write_video('temp.mp4', frame_list, width, height, framerate)
-            concat_video('out.mp4', 'temp.mp4', 'output.mp4')
-            return
+        frame_list = convert_vid_to_np_arr(_input, precalculated, frame_number, frames_per_batch)
+        if os.path.exists('temp/out.mp4'):
+            write_video('temp/temp.mp4', frame_list, width, height, framerate)
+            # concat_video('out.mp4', 'temp.mp4', 'output.mp4')
+            concat_video()
         else:
-            write_video('out.mp4', frame_list, width, height, framerate)
-            #return
+            write_video('temp/out.mp4', frame_list, width, height, framerate)
         if (total_frames - frame_number) < frames_per_batch:
             frames_per_batch = total_frames - frame_number
         frame_number += frames_per_batch
-
+    print(f'Total running duration: {datetime.now() - start_time}')
     return
 
 if __name__ == "__main__":
