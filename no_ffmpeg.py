@@ -1,11 +1,11 @@
+from time import sleep
 import ffmpeg
 import numpy as np
 from datetime import datetime
 import argparse
 import subprocess as sp
 import os
-import natsort
-# import resource
+import resource
 
 def get_video_information(video_path):
     '''
@@ -80,16 +80,15 @@ def assemble_video(temp_file, output):
     '''
     Convert the images to video
     '''
-        # ffmpeg -i temp\testing100.mp4 -i temp\testing200.mp4 -filter_complex "[0:v] [1:v] concat=n=2:v=1 [v]" -map "[v]" output.mp4
-    command = ['ffmpeg',
-               '-i', output,
-               '-i', temp_file,
-               '-filter_complex', '[0:v]', '[1:v]', 'concat=n=2:v=1', '[v]',
-               '-map', '[v]'
-               '-y',
-               output]
-    sp.run(command)
-
+    vid1 = ffmpeg.input('out.mp4')
+    vid2 = ffmpeg.input(temp_file)
+    (
+        ffmpeg
+        .filter([vid1, vid2], 'concat')
+        .output('out.mp4')
+        .overwrite_output()
+        .run()
+    )
 
 def vidwrite(fn, images, framerate=60, vcodec='libx264'):
     _,height,width,_ = images.shape
@@ -176,6 +175,8 @@ def main(_input, _output):
 
     # Initialize variables for conversion
     width, height, framerate, duration, total_frames = get_video_information(_input)
+    print(width, height, framerate, duration, total_frames)
+    return
     frames_per_batch = 100
     ind = 0
     timestamp = 0
@@ -187,8 +188,6 @@ def main(_input, _output):
     print(f'Duration: {duration} s\n')
     print(f'Processed: {ind} / {total_frames} frames')
 
-    assemble_video("temp.mp4", "out.mp4")
-    return
     # Process the entire video in batches of `frames_per_batch` frames
     while ind < total_frames:
         np_arr = convert_vid_to_np_arr(_input, width, height, timestamp, batch_dur)
@@ -198,15 +197,20 @@ def main(_input, _output):
             clear_lines()
             print(f'Processed: {ind + 1} / {total_frames} frames')
             ind += 1
-        if os.path.isfile('out.mp4'):
+        del np_arr
+        if os.path.exists('out.mp4'):
             vidwrite("temp.mp4", test, framerate, vcodec='libx264')
+            sleep(5)
+            assemble_video("temp.mp4", "out.mp4")
         else:
-            vidwrite("out.mp4", test, framerate, vcodec='libx264')
+            vidwrite("out.mp4", test, framerate, vcodec="libx264")
+            sleep(5)
+        del test
         duration -= batch_dur
         timestamp += batch_dur 
         batch_dur = batch_dur if duration > batch_dur else duration
 
-    # print(f'Memory used: {resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024} Mbs')
+    print(f'Memory used: {resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024} Mbs')
     print(f'Total running duration: {datetime.now() - start_time}')
 
 if __name__ == "__main__":
