@@ -10,19 +10,18 @@ PS: Even in non-ffmpeg version, only the palette conversion algorithm is free of
 
 - ffmpeg already installed
 - Run the pip command `pip install ffmpeg-python numpy`
-- Run `python app.py`
 
 #### ffmpeg version
 
-- Run `python app.py`
+- Run `python paletteuse.py`
+
+#### my implementation with ffmpeg
+
+- Run `python ff.py`
 
 #### non-ffmpeg version
 
-- Run `python noff.py`
-
-## TODO
-
-- Find a way to get video stream as numpy array in noff.py
+- Run `python no_ffmpeg.py`
 
 ## Example
 

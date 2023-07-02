@@ -2,6 +2,7 @@ import ffmpeg
 import numpy as np
 from datetime import datetime
 import argparse
+# import resource
 
 def convert_vid_to_np_arr(video_path):
     '''
@@ -129,6 +130,7 @@ def main(_input, _output):
     vidwrite(_output, np_arr, precalculated, rate, vcodec='libx264')
 
     print(f'Processed: {len(np_arr)} / {len(np_arr)} frames')
+    # print(f'Memory used: {resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024} Mbs')
     print(f'Duration: {datetime.now() - start_time}')
 
 if __name__ == "__main__":
